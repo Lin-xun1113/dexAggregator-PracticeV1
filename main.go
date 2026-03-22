@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"dex-aggregator/dex"
@@ -24,18 +23,20 @@ func main() {
 	// 当你写好真正的 uniswap.go 后，只需要在这里把 NewMockDEX 换成 NewUniswap(api_url) 即可！
 	dexes := []dex.DEX{
 		dex.NewMockDEX("🦄 Uniswap V3", 100, 800),    // 模拟 100~800ms 延迟
-		dex.NewMockDEX("🍣 Sushiswap", 300, 1500),   // 模拟 300~1500ms 延迟 (稍微慢点)
-		dex.NewMockDEX("📈 Curve Finance", 200, 500),// 模拟 200~500ms 延迟
+		dex.NewMockDEX("🍣 Sushiswap", 300, 1500),    // 模拟 300~1500ms 延迟 (稍微慢点)
+		dex.NewMockDEX("📈 Curve Finance", 200, 500), // 模拟 200~500ms 延迟
 	}
 
-	// 2. 准备接收结果的 Slice (切片)
-	var results []*model.QuoteResult
+	// // （挑战A版本已废弃）2. 准备接收结果的 Slice (切片)
+	// var results []*model.QuoteResult
+	// // （挑战A版本已废弃）我们需要一个锁来保护 results 切片，因为多个 goroutine 可能会同时往里面 append
+	// var mu sync.Mutex
+	// // （挑战A版本已废弃）3. 使用 WaitGroup 等待所有的询价结束
+	// var wg sync.WaitGroup
 
-	// 我们需要一个锁来保护 results 切片，因为多个 goroutine 可能会同时往里面 append
-	var mu sync.Mutex 
-	
-	// 3. 使用 WaitGroup 等待所有的询价结束
-	var wg sync.WaitGroup
+	// 2. 准备接收结果的 Channel (通道)
+	// 使用带缓冲的 Channel，大小等于 DEX 数量，这样即使所有 goroutine 同时写入也不会阻塞
+	ch := make(chan *model.QuoteResult, len(dexes))
 
 	startTime := time.Now() // 记录开始时间
 
@@ -44,12 +45,12 @@ func main() {
 
 	// 遍历每个 DEX，为每个 DEX 启动一个专门的 goroutine
 	for _, d := range dexes {
-		wg.Add(1) // 启动前计数器 +1
+		// wg.Add(1) // （挑战A版本已废弃）启动前计数器 +1
 
 		// 启动 Goroutine
 		// ⚠️ 注意：这里把 `d` 作为参数传进去，为了避免闭包捕获循环变量的问题 (虽然 Go 1.22 修复了，但显式传递更好)
 		go func(exchange dex.DEX) {
-			defer wg.Done() // 函数退出时计数器 -1
+			// （挑战A版本已废弃）defer wg.Done() // 函数退出时计数器 -1
 
 			// 调用接口的询价方法 (此时它们会各自去 sleep 模拟网络耗时)
 			res, err := exchange.GetQuote(fromToken, toToken, amount)
@@ -58,18 +59,33 @@ func main() {
 				return // 提早退出这个 goroutine
 			}
 
-			// 成功拿到结果，我们需要加锁写入公共的 results 切片中
-			mu.Lock()
-			results = append(results, res)
-			mu.Unlock()
+			// （挑战A版本已废弃）成功拿到结果，我们需要加锁写入公共的 results 切片中
+			// mu.Lock()
+			// results = append(results, res)
+			// mu.Unlock()
+			ch <- res
 
 			fmt.Printf("✅ [%s]\t 返回报价: 耗时 %dms\n", res.DEXName, res.Latency)
 
 		}(d)
 	}
 
-	// 阻塞这里，直到所有加入了 WG 的 goroutine 报告 Done
-	wg.Wait()
+	// （挑战A版本已废弃）阻塞这里，直到所有加入了 WG 的 goroutine 报告 Done
+	// wg.Wait()
+	timeout := time.After(500 * time.Millisecond)
+
+	var results []*model.QuoteResult
+
+Loop:
+	for i := 0; i < len(dexes); i++ {
+		select {
+		case res := <-ch:
+			results = append(results, res)
+		case <-timeout:
+			fmt.Println("已达500ms等待时间上限，超时返回，舍弃未返回的gorountine结果")
+			break Loop
+		}
+	}
 
 	totalTime := time.Since(startTime)
 	fmt.Println("--------------------------------------------------")
