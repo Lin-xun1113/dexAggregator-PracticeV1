@@ -22,6 +22,7 @@ func main() {
 	// 这里放的虽然是 MockDEX，但它们都实现了 DEX 接口。
 	// 当你写好真正的 uniswap.go 后，只需要在这里把 NewMockDEX 换成 NewUniswap(api_url) 即可！
 	dexes := []dex.DEX{
+		dex.NewBinanceDEX(),
 		dex.NewMockDEX("🦄 Uniswap V3", 100, 800),    // 模拟 100~800ms 延迟
 		dex.NewMockDEX("🍣 Sushiswap", 300, 1500),    // 模拟 300~1500ms 延迟 (稍微慢点)
 		dex.NewMockDEX("📈 Curve Finance", 200, 500), // 模拟 200~500ms 延迟
@@ -72,7 +73,7 @@ func main() {
 
 	// （挑战A版本已废弃）阻塞这里，直到所有加入了 WG 的 goroutine 报告 Done
 	// wg.Wait()
-	timeout := time.After(500 * time.Millisecond)
+	timeout := time.After(1000 * time.Millisecond)
 
 	var results []*model.QuoteResult
 
