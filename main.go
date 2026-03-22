@@ -14,6 +14,7 @@ func main() {
 
 	fmt.Println("🚀 启动简易多 DEX 并发询价器...\n")
 
+	startTime := time.Now()
 	fromToken := "ETH"
 	toToken := "USDC"
 	amount := 1.5 // 想用 1.5 个 ETH 换 USDC
@@ -23,9 +24,8 @@ func main() {
 	// 当你写好真正的 uniswap.go 后，只需要在这里把 NewMockDEX 换成 NewUniswap(api_url) 即可！
 	dexes := []dex.DEX{
 		dex.NewBinanceDEX(),
-		dex.NewMockDEX("🦄 Uniswap V3", 100, 800),    // 模拟 100~800ms 延迟
-		dex.NewMockDEX("🍣 Sushiswap", 300, 1500),    // 模拟 300~1500ms 延迟 (稍微慢点)
-		dex.NewMockDEX("📈 Curve Finance", 200, 500), // 模拟 200~500ms 延迟
+		dex.NewOkxDEX(),
+		dex.NewKucoinDEX(),
 	}
 
 	// // （挑战A版本已废弃）2. 准备接收结果的 Slice (切片)
@@ -39,7 +39,7 @@ func main() {
 	// 使用带缓冲的 Channel，大小等于 DEX 数量，这样即使所有 goroutine 同时写入也不会阻塞
 	ch := make(chan *model.QuoteResult, len(dexes))
 
-	startTime := time.Now() // 记录开始时间
+	startTime1 := time.Now() // 记录开始时间
 
 	fmt.Printf("开始询价: 用 %.1f %s 兑换 %s\n", amount, fromToken, toToken)
 	fmt.Println("--------------------------------------------------")
@@ -73,7 +73,7 @@ func main() {
 
 	// （挑战A版本已废弃）阻塞这里，直到所有加入了 WG 的 goroutine 报告 Done
 	// wg.Wait()
-	timeout := time.After(1000 * time.Millisecond)
+	timeout := time.After(500 * time.Millisecond)
 
 	var results []*model.QuoteResult
 
@@ -116,4 +116,5 @@ Loop:
 	fmt.Printf("请去 【%s】 交易！\n", bestQuote.DEXName)
 	fmt.Printf("预期可换得: %.2f %s\n", bestQuote.AmountOut, toToken)
 	fmt.Printf("均价: %.2f %s/%s\n", bestQuote.AmountOut/amount, toToken, fromToken)
+	fmt.Printf("全过程总计耗时: %dms\n", time.Since(startTime1).Milliseconds())
 }
